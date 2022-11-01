@@ -1,6 +1,6 @@
 ---
 title: "BEE 4750/5750 Homework 4"
-author: "Your name here (your netID here)"
+author: "Julia Gonzales (jeg334)"
 date: `j import Dates; Dates.Date(Dates.now())`
 weave_options:
     term: false
@@ -20,11 +20,74 @@ Pkg.instantiate()
 
 ## Problem 1.1
 
+```julia
+
+Massfracs = [.15; .40; .05;.03;.02;.05;.18;.04;.02;.02;.01;.03]
+Mass1 = city1mass*Massfracs
+Mass2 = city2mass*Massfracs
+CombFrac = [0.08;0.07;0.05;0.1;0.15;0.02;0.02;1;1;1;1;.7]
+MRFRecRate = [0;.55;.15;.1;0;.3;.4;.6;.75;.8;.5;0]
+OverallAsh1 = sum(Mass1.*CombFrac)
+OverallAsh2 = sum(Mass2.*CombFrac)
+OverallRecRate1 =  sum(Mass1.*MRFRecRate)
+OverallRecRate2 = sum(Mass2.*MRFRecRate)
+AshRecycling = CombFrac.*MRFRecRate
+TotalRecAsh1 = sum(Mass1.*AshRecycling)
+TotalRecAsh2 = sum(Mass2.*AshRecycling)
+```
+
 ## Problem 1.2
+
+One decision variable here is the flow of waste from each city to each disposal site $W_{i,j}$, where i is the city source and j is the disposal sink.
+We can change how much waste City 1 or 2 chooses to send to the landfill, WTE, or recycling facilities.  
+
+Another decision variable is the amount of residual waste transported from the recycling and WTE plant, $R_{k,j}$, where i is the disposal source and j is the disposal sink. 
+These plants output their own waste (contaminated recyclables, ash, etc.) that must be transported somewhere else. 
+
+One other decision variable is whether or not each disposal facility will be built/turned on, $Y_j$, where j is the disposal site.
+If the plant is built, then there is a cost associated with building it. If it is not built, then it does not contribute to the objective function.
 
 ## Problem 1.3
 
+The objective here is to minimize the cost of disposing waste. 
+
+There are four elements to the cost: the fixed cost of construction, tipping fees, recycling costs, and transportation costs. 
+```math
+i = 1,2
+j = 1,2,3 
+```
+Here, $j = 1$ represents the landfill, $j = 2$ represents the MRF, and $j = 3$ represents the landfill. 
+```math
+C_{total} = \sum_j C_{fixed,j}*Y_j + \sum_{i,j} W_{i,j}*(C_{tipping, j} + C_{transportation, j}) + \sum_i W_{i,2} * C_recycling. 
+```
+The transportation costs can be calculated as the product of the distance waste has to travel ($l_{i,j}) and the cost per distance travelled per Mg of waste ($a_{i,j}). 
+```math
+C_{transportation} = \sum_(i,j) a_{i,j}*l_{i,j}
+```
+
+
 ## Problem 1.4
+
+One constraint is that $Y_j$ is binary - a plant can only be built/not built, or on/not on, and it can't be somewhere in the middle. 
+If we decide that a plant receives no waste, then it is off. If it receives some waste, it is on. 
+```math
+Y_j = {0 if \sum_{i,j} W_{i,j} = 0 \\1 if \sum_{i,j} W_{i,j} > 0 
+```
+Another constraint is that no disposal site can receive more waste than it has the capacity to hold. 
+If $K_j$ is the capacity of a disposal location:
+```math
+\sum_i W_{i,j} <= K_j 
+```
+The total waste transfer from each source must also equal its total waste production. 
+If $S_i$ is the total waste source from a site: 
+```math
+\sum_{j} W_{i,j} = S_i
+```
+Waste transfers must also be nonnegative. 
+```math
+W_{i,j} >= 0
+```
+
 
 ## Problem 1.5
 
