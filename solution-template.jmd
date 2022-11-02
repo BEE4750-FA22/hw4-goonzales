@@ -21,19 +21,17 @@ Pkg.instantiate()
 ## Problem 1.1
 
 ```julia
+# the total 
+city1mass = 100 #(MG/d)
+city2mass = 170 # (MG/d)
 
+#the masses
 Massfracs = [.15; .40; .05;.03;.02;.05;.18;.04;.02;.02;.01;.03]
-Mass1 = city1mass*Massfracs
-Mass2 = city2mass*Massfracs
 CombFrac = [0.08;0.07;0.05;0.1;0.15;0.02;0.02;1;1;1;1;.7]
 MRFRecRate = [0;.55;.15;.1;0;.3;.4;.6;.75;.8;.5;0]
-OverallAsh1 = sum(Mass1.*CombFrac)
-OverallAsh2 = sum(Mass2.*CombFrac)
-OverallRecRate1 =  sum(Mass1.*MRFRecRate)
-OverallRecRate2 = sum(Mass2.*MRFRecRate)
-AshRecycling = CombFrac.*MRFRecRate
-TotalRecAsh1 = sum(Mass1.*AshRecycling)
-TotalRecAsh2 = sum(Mass2.*AshRecycling)
+OverallAshRate = sum(Massfracs.*CombFrac)
+OverallRecRate = sum(Massfracs.*MRFRecRate)
+AshRecycling = sum(CombFrac.*MRFRecRate)
 ```
 
 ## Problem 1.2
@@ -56,48 +54,172 @@ There are four elements to the cost: the fixed cost of construction, tipping fee
 i = 1,2
 j = 1,2,3 
 ```
-Here, $j = 1$ represents the landfill, $j = 2$ represents the MRF, and $j = 3$ represents the landfill. 
+Here, $j = 1$ represents the landfill, $j = 2$ represents the MRF, and $j = 3$ represents the waste to energy facility.  
 ```math
-C_{total} = \sum_j C_{fixed,j}*Y_j + \sum_{i,j} W_{i,j}*(C_{tipping, j} + C_{transportation, j}) + \sum_i W_{i,2} * C_recycling. 
+C_{total} = \sum_j C_{fixed,j}*Y_j + \sum_{i,j} W_{i,j}*(C_{tipping, j} + C_{transportation, j}) + \sum_{i,j} R_{k,j}*(C_{tipping, j} + C_{transportation, j}) + \sum_i W_{i,2} * C_recycling. 
 ```
 The transportation costs can be calculated as the product of the distance waste has to travel ($l_{i,j}) and the cost per distance travelled per Mg of waste ($a_{i,j}). 
 ```math
 C_{transportation} = \sum_(i,j) a_{i,j}*l_{i,j}
 ```
 
-
 ## Problem 1.4
 
 One constraint is that $Y_j$ is binary - a plant can only be built/not built, or on/not on, and it can't be somewhere in the middle. 
 If we decide that a plant receives no waste, then it is off. If it receives some waste, it is on. 
 ```math
-Y_j = {0 if \sum_{i,j} W_{i,j} = 0 \\1 if \sum_{i,j} W_{i,j} > 0 
+Y_j = {0 if \sum_{i,j} W_{i,j}+R{i,j} = 0 \\1 if \sum_{i,j} W_{i,j} + R_{i,j} > 0 
 ```
+Based on how residuals are produced from recycling and WTE, and the combustion/recycling rates, we also know that $Y_3 = 1$.
+
 Another constraint is that no disposal site can receive more waste than it has the capacity to hold. 
 If $K_j$ is the capacity of a disposal location:
 ```math
 \sum_i W_{i,j} <= K_j 
 ```
 The total waste transfer from each source must also equal its total waste production. 
-If $S_i$ is the total waste source from a site: 
+If $S_i$ is the total waste source from a city, $P_j$ is the percent of waste that results in a residual: 
 ```math
 \sum_{j} W_{i,j} = S_i
+\sum_{j} R{2,j} = \sum_{i} (P_2)*W_{i,2}
 ```
+
 Waste transfers must also be nonnegative. 
 ```math
 W_{i,j} >= 0
 ```
 
+More constraints are that residuals cannot be transported from a disposal site to itself, ash cannot be recycled, and the landfill produces no residuals.
+```math
+R_{j,j} = 0 
+R_{3,2} = 0
+R_{1,:} = 0
+```
 
 ## Problem 1.5
 
+```julia
+#2000 Y[1] + 1500 Y[2] + 2500 Y[3] + 95 W[1,1] + 87.5 W[2,1] + 59.5 W[1,2] + 74.5 W[2,2] + 82.5 W[1,3] + 75 W[2,3] + 50 R[1,1] + 98 R[2,1] + 77 R[3,1] + 55 R[1,2] + 7 R[2,2] + 29.5 R[3,2] + 87 R[1,3] + 82.5 R[2,3] + 60 R[3,3]
+
+#setup cost variables
+S=[200; 350; 150]
+FixedCost = [2000;1500;2500]
+TippingFee = [50;7;60]
+RecyclingFee = 45
+TransportationCost = 1.5
+#remember row 1 = city 1, row 2 = city 2, column 1 = landfill, column 2 = mrf, column 3 = wte
+SourceDistance = [30 5 15;25 15 10]
+Sink2SinkDistance = [0 32 18; 32 0 15; 18 15 0]
+
+#JuMP it
+using JuMP
+using Cbc
+
+waste = Model(Cbc.Optimizer)
+I = 1:2
+J = 1:3 
+@variable(waste,W[i in I, j in J]>=0)
+@variable(waste,R[k in J, j in J]>=0)
+@variable(waste,Y[i in J],Bin)
+
+@objective(waste,Min,sum((FixedCost.*Y))+sum(TippingFee'.*W)+sum(TransportationCost*SourceDistance.*W)+sum(TippingFee'.*R)+sum(TransportationCost*Sink2SinkDistance.*R)+sum(RecyclingFee*W[:,2]))
+
+#build constraints
+#on or off constraints
+@constraint(waste,commitland, Y[1]==1)
+@constraint(waste,commitrecyc,!Y[2]=> {sum(W[:,2])+sum(R[:,2])==0})
+@constraint(waste,commitwte,!Y[3]=> {sum(W[:,3])+sum(R[:,3])==0})
+#mass within capacity
+@constraint(waste,landfills,sum(W[:,1])+sum(R[:,1])<=S[1])
+@constraint(waste,recycling,sum(W[:,2])+sum(R[:,2])<=S[2])
+@constraint(waste,wte,sum(W[:,3])+sum(R[:,3])<=S[3])
+#mass balance from sources
+@constraint(waste,city1,sum(W[1,:])==city1mass)
+@constraint(waste,city2,sum(W[2,:])==city2mass)
+#mass balance from residuals - these could be written in terms of specific indices or with the semi colon
+@constraint(waste,recyresid, sum(R[2,:])==(1-OverallRecRate)*sum(W[:,2]))
+@constraint(waste,wteresdi,sum(R[3,:])==(OverallAshRate*sum(W[:,3]))+AshRecycling*R[2,3])
+#residuals cannot be transported to themselves
+@constraint(waste,resid2resid,(sum(R[j,j] for j in J)) == 0) 
+#no ash is recycled
+@constraint(waste,noashrecyc,R[3,2]==0)
+#no landfill residuals
+@constraint(waste,nolandresid,sum(R[1,:])==0)
+
+
+#set_silent(waste)
+optimize!(waste)
+wastestreams = value.(W).data 
+residualstreams = value.(R).data
+onoff = value.(Y).data
+
+```
 ## Problem 1.6
+
+The objective value was $28886. The MRF will not be used. 
 
 # Problem 2
 
 ## Problem 2.1
 
+The carbon tax does not impose any new constraints - rather, it merely changes the costs associated with transportation and tipping fees. 
+To modify the optimization program from Problem 1, these costs must be changed. 
+
 ## Problem 2.2
+
+```julia
+#setup cost variables
+S=[200; 350; 150]
+FixedCost = [2000;1500;2500]
+TippingFee = [50;7;75]
+RecyclingFee = 45
+TransportationCost = 2
+#remember row 1 = city 1, row 2 = city 2, column 1 = landfill, column 2 = mrf, column 3 = wte
+SourceDistance = [30 5 15;25 15 10]
+Sink2SinkDistance = [0 32 18; 32 0 15; 18 15 0]
+
+#JuMP it
+using JuMP
+using Cbc
+
+carbontaxwaste = Model(Cbc.Optimizer)
+I = 1:2
+J = 1:3 
+@variable(carbontaxwaste,W[i in I, j in J]>=0)
+@variable(carbontaxwaste,R[k in J, j in J]>=0)
+@variable(carbontaxwaste,Y[i in J],Bin)
+
+@objective(carbontaxwaste,Min,sum((FixedCost.*Y))+sum(TippingFee'.*W)+sum(TransportationCost*SourceDistance.*W)+sum(TippingFee'.*R)+sum(TransportationCost*Sink2SinkDistance.*R)+RecyclingFee*sum(W[:,2]))
+
+#build constraints
+#on or off constraints
+@constraint(carbontaxwaste,commitland, Y[1]==1)
+@constraint(carbontaxwaste,commitrecyc,!Y[2]=> {sum(W[:,2])+sum(R[:,2])==0})
+@constraint(carbontaxwaste,commitwte,!Y[3]=> {sum(W[:,3])+sum(R[:,3])==0})
+#mass within capacity
+@constraint(carbontaxwaste,landfills,sum(W[:,1])+sum(R[:,1])<=S[1])
+@constraint(carbontaxwaste,recycling,sum(W[:,2])+sum(R[:,2])<=S[2])
+@constraint(carbontaxwaste,wte,sum(W[:,3])+sum(R[:,3])<=S[3])
+#mass balance from sources
+@constraint(carbontaxwaste,city1,sum(W[1,:])==city1mass)
+@constraint(carbontaxwaste,city2,sum(W[2,:])==city2mass)
+#mass balance from residuals - these could be written in terms of specific indices or with the semi colon
+@constraint(carbontaxwaste,recyresid, sum(R[2,:])==(1-OverallRecRate)*sum(W[:,2]))
+@constraint(carbontaxwaste,wteresdi,sum(R[3,:])==(OverallAshRate*sum(W[:,3]))+AshRecycling*R[2,3])
+#residuals cannot be transported to themselves
+@constraint(carbontaxwaste,resid2resid,(sum(R[j,j] for j in J)) == 0) 
+#no ash is recycled
+@constraint(carbontaxwaste,noashrecyc,R[3,2]==0)
+#no landfill residuals
+@constraint(carbontaxwaste,nolandresid,sum(R[1,:])==0)
+
+
+#set_silent(waste)
+optimize!(carbontaxwaste)
+wastestreams = value.(W).data 
+residualstreams = value.(R).data
+onoff = value.(Y).data
+```
 
 ## Problem 2.3
 
