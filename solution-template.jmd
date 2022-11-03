@@ -29,18 +29,23 @@ city2mass = 170 # (MG/d)
 Massfracs = [.15; .40; .05;.03;.02;.05;.18;.04;.02;.02;.01;.03]
 CombFrac = [0.08;0.07;0.05;0.1;0.15;0.02;0.02;1;1;1;1;.7]
 MRFRecRate = [0;.55;.15;.1;0;.3;.4;.6;.75;.8;.5;0]
-OverallAshRate = sum(Massfracs.*CombFrac)
-OverallRecRate = sum(Massfracs.*MRFRecRate)
-AshRecycling = sum(CombFrac.*MRFRecRate)
+OverallAshRate = sum(Massfracs.*CombFrac);
+OverallRecRate = sum(Massfracs.*MRFRecRate);
+AshRecycling = sum(Massfracs.*CombFrac.*MRFRecRate);
 ```
+
+The overall percentage of waste that becomes combustion ash is `j round(OverallAshRate*100; digits=0)`%.
+The overall recycling rate is `j round(OverallRecRate*100;digits=0)`%. 
+The percent of recycling residuals that become ash is `j round(AshRecycling*100;digits=0)`%.
+
 
 ## Problem 1.2
 
-One decision variable here is the flow of waste from each city to each disposal site $W_{i,j}$, where i is the city source and j is the disposal sink.
-We can change how much waste City 1 or 2 chooses to send to the landfill, WTE, or recycling facilities.  
+One decision variable here is the flow of waste from each city to each disposal site, $W_{i,j}$, where i is the city source and j is the disposal sink.
+We can change how much waste City 1 or 2 chooses to send to the landfill, MRF, or WTE.   
 
-Another decision variable is the amount of residual waste transported from the recycling and WTE plant, $R_{k,j}$, where i is the disposal source and j is the disposal sink. 
-These plants output their own waste (contaminated recyclables, ash, etc.) that must be transported somewhere else. 
+Another decision variable is the amount of residual waste transported from each disposal site, $R_{k,j}$, where i is the disposal source and j is the disposal sink. 
+The MRF and WTE output their own waste (contaminated recyclables, ash, etc.) that must be transported somewhere else. 
 
 One other decision variable is whether or not each disposal facility will be built/turned on, $Y_j$, where j is the disposal site.
 If the plant is built, then there is a cost associated with building it. If it is not built, then it does not contribute to the objective function.
@@ -51,37 +56,45 @@ The objective here is to minimize the cost of disposing waste.
 
 There are four elements to the cost: the fixed cost of construction, tipping fees, recycling costs, and transportation costs. 
 ```math
-i = 1,2
-j = 1,2,3 
+i = 1,2 \\
+j = 1,2,3
 ```
-Here, $j = 1$ represents the landfill, $j = 2$ represents the MRF, and $j = 3$ represents the waste to energy facility.  
+Here, $i = 1$ represents City 1, $i = 2$ represents City 2, $j = 1$ represents the landfill, $j = 2$ represents the MRF, and $j = 3$ represents the waste to energy facility.  
+The objective function is below
 ```math
-C_{total} = \sum_j C_{fixed,j}*Y_j + \sum_{i,j} W_{i,j}*(C_{tipping, j} + C_{transportation, j}) + \sum_{i,j} R_{k,j}*(C_{tipping, j} + C_{transportation, j}) + \sum_i W_{i,2} * C_recycling. 
+\\ C_{total} = \sum_j C_{fixed,j}*Y_j + \sum_{i,j} W_{i,j}*(C_{tipping,j} + C_{transportation,i,j}) \\
++ \sum_{i,j} R_{k,j}*(C_{tipping, j} + C_{transportation,k,j}) + \sum_{i,j} (W_{i,2} - R_{2,j})*C_{recycling}
+\\
 ```
-The transportation costs can be calculated as the product of the distance waste has to travel ($l_{i,j}) and the cost per distance travelled per Mg of waste ($a_{i,j}). 
+The transportation costs can be calculated as the product of the distance waste has to travel ($l_{i,j}$) and the cost per distance travelled per Mg of waste ($a_{i,j}$). 
 ```math
-C_{transportation} = \sum_(i,j) a_{i,j}*l_{i,j}
+C_{transportation} = \sum_{i,j} a_{i,j}*l_{i,j}
 ```
 
 ## Problem 1.4
 
 One constraint is that $Y_j$ is binary - a plant can only be built/not built, or on/not on, and it can't be somewhere in the middle. 
 If we decide that a plant receives no waste, then it is off. If it receives some waste, it is on. 
+
+
 ```math
-Y_j = {0 if \sum_{i,j} W_{i,j}+R{i,j} = 0 \\1 if \sum_{i,j} W_{i,j} + R_{i,j} > 0 
+Y_j = \left\{ 0 \quad \text{if  } \quad \sum_{i,j,k} W_{i,j}+R_{k,j} = 0, 
+\quad 1 \quad \text{if  } \quad \sum_{i,j} W_{i,j} + R_{i,j} > 0\right\}
 ```
+
 Based on how residuals are produced from recycling and WTE, and the combustion/recycling rates, we also know that $Y_3 = 1$.
 
 Another constraint is that no disposal site can receive more waste than it has the capacity to hold. 
 If $K_j$ is the capacity of a disposal location:
 ```math
-\sum_i W_{i,j} <= K_j 
+\sum_i W_{i,j} \leq K_j 
 ```
 The total waste transfer from each source must also equal its total waste production. 
-If $S_i$ is the total waste source from a city, $P_j$ is the percent of waste that results in a residual: 
+This is also true for the residuals: the sum of the residuals leaving a facility must equal the fraction of waste entering it that becomes a residual. 
+If $S_i$ is the total waste source from a city and $P_j$ is the percent of waste that results in a residual,
 ```math
-\sum_{j} W_{i,j} = S_i
-\sum_{j} R{2,j} = \sum_{i} (P_2)*W_{i,2}
+\sum_{j} W_{i,j} = S_i \\
+\sum_{j} R_{2,j} = \sum_{i} (P_2)*W_{i,2}
 ```
 
 Waste transfers must also be nonnegative. 
@@ -91,14 +104,15 @@ W_{i,j} >= 0
 
 More constraints are that residuals cannot be transported from a disposal site to itself, ash cannot be recycled, and the landfill produces no residuals.
 ```math
-R_{j,j} = 0 
-R_{3,2} = 0
+R_{j,j} = 0 \\
+R_{3,2} = 0 \\
 R_{1,:} = 0
 ```
+This list of constraints is complete because it captures the mass balances for each source/sink, and the practical limitations of the system (residual percentages, facility capacities, nonnegativity).
 
 ## Problem 1.5
 
-```julia
+```julia;
 #setup cost variables
 S=[200; 350; 150]
 FixedCost = [2000;1500;2500]
@@ -120,7 +134,8 @@ J = 1:3
 @variable(waste,R[k in J, j in J]>=0)
 @variable(waste,Y[i in J],Bin)##
 
-@objective(waste,Min,sum((FixedCost.*Y))+sum(TippingFee'.*W)+sum(TransportationCost*SourceDistance.*W)+sum(TippingFee'.*R)+sum(TransportationCost*Sink2SinkDistance.*R)+(sum(RecyclingFee*W[:,2]))-sum(RecyclingFee*R[2,:]))
+@objective(waste,Min,sum((FixedCost.*Y))+sum(TippingFee'.*W)+sum(TransportationCost*SourceDistance.*W)
++sum(TippingFee'.*R)+sum(TransportationCost*Sink2SinkDistance.*R)+(sum(RecyclingFee*W[:,2]))-sum(RecyclingFee*R[2,:]))
 
 #build constraints
 #on or off constraints
@@ -145,12 +160,13 @@ J = 1:3
 @constraint(waste,nolandresid,sum(R[1,:])==0)
 
 
-set_silent(waste)
-optimize!(waste)
-wastestreams = value.(W).data 
-residualstreams = value.(R).data
-onoff = value.(Y).data
+set_silent(waste);
+optimize!(waste);
+wastestreams = value.(W).data;
+residualstreams = value.(R).data;
+onoff = value.(Y).data;
 ```
+
 ## Problem 1.6
 ```julia
 import Pkg
@@ -167,26 +183,28 @@ shapes=[:hex, :hex, :hex, :hex, :hex]
 xpos = [0, -8, 0, 5, 0]
 ypos = [7, 0, 2, -2, -7]
 edgelabel_dict = Dict()
-edgelabel_dict[1,2]=string(round(wastestreams[1,1],digits=1),"Mg/d")
-edgelabel_dict[1,3]=string(round(wastestreams[1,2],digits=1),"Mg/d")
-edgelabel_dict[1,4]=string(round(wastestreams[1,3],digits=1),"Mg/d")
-edgelabel_dict[5,2]=string(round(wastestreams[2,1],digits=1),"Mg/d")
-edgelabel_dict[5,3]=string(round(wastestreams[2,2],digits=1),"Mg/d")
-edgelabel_dict[5,4]=string(round(wastestreams[2,3],digits=1),"Mg/d")
-edgelabel_dict[3,2]=string(round(residualstreams[2,1],digits=1),"Mg/d")
+edgelabel_dict[1,2]=string(round(wastestreams[1,1],digits=0),"Mg/d")
+edgelabel_dict[1,3]=string(round(wastestreams[1,2],digits=0),"Mg/d")
+edgelabel_dict[1,4]=string(round(wastestreams[1,3],digits=0),"Mg/d")
+edgelabel_dict[5,2]=string(round(wastestreams[2,1],digits=0),"Mg/d")
+edgelabel_dict[5,3]=string(round(wastestreams[2,2],digits=0),"Mg/d")
+edgelabel_dict[5,4]=string(round(wastestreams[2,3],digits=0),"Mg/d")
+edgelabel_dict[3,2]=string(round(residualstreams[2,1],digits=0),"Mg/d")
 edgelabel_dict[4,2]=string(round(residualstreams[3,1],digits=1),"Mg/d")
 
-graphplot(A, names=names, x=xpos, y=ypos, fontsize = 6,markersize=2, markershapes=shapes, markercolor=:white,edgelabel = edgelabel_dict,self_edge_size=5,linealpha=0.5)
+graphplot(A, names=names, x=xpos, y=ypos, fontsize = 6,markersize=2, markershapes=shapes, 
+markercolor=:white,edgelabel = edgelabel_dict,self_edge_size=5,linealpha=0.5)
 ```
 
-The objective value was $28886. The MRF will not be used. 
+The objective value was $$28886. The MRF will not be used. 
 
 # Problem 2
 
 ## Problem 2.1
 
 The carbon tax does not impose any new constraints - rather, it merely changes the costs associated with transportation and tipping fees. 
-To modify the optimization program from Problem 1, these costs must be changed. 
+To modify the optimization program from Problem 1, these costs must be changed such that
+the tipping fee is $\$$75/Mg and $a_{i,j}=2$. 
 
 ## Problem 2.2
 
@@ -212,7 +230,8 @@ J = 1:3
 @variable(carbontaxwaste,R[k in J, j in J]>=0)
 @variable(carbontaxwaste,Y[i in J],Bin)
 
-@objective(carbontaxwaste,Min,sum((FixedCost.*Y))+sum(TippingFee'.*W)+sum(TransportationCost*SourceDistance.*W)+sum(TippingFee'.*R)+sum(TransportationCost*Sink2SinkDistance.*R)+(sum(RecyclingFee*W[:,2]))-sum(RecyclingFee*R[2,:]))
+@objective(carbontaxwaste,Min,sum((FixedCost.*Y))+sum(TippingFee'.*W)+sum(TransportationCost*SourceDistance.*W)
++sum(TippingFee'.*R)+sum(TransportationCost*Sink2SinkDistance.*R)+(sum(RecyclingFee*W[:,2]))-sum(RecyclingFee*R[2,:]))
 
 #build constraints
 #on or off constraints
@@ -237,11 +256,11 @@ J = 1:3
 @constraint(carbontaxwaste,nolandresid,sum(R[1,:])==0)
 
 
-#set_silent(waste)
+set_silent(carbontaxwaste)
 optimize!(carbontaxwaste)
-wastestreams = value.(W).data 
-residualstreams = value.(R).data
-onoff = value.(Y).data
+wastestreams = value.(W).data;
+residualstreams = value.(R).data;
+onoff = value.(Y).data;
 ```
 
 ## Problem 2.3
@@ -258,16 +277,26 @@ shapes=[:hex, :hex, :hex, :hex, :hex]
 xpos = [0, -8, 0, 5, 0]
 ypos = [7, 0, 2, -2, -7]
 edgelabel_dict = Dict()
-edgelabel_dict[1,2]=string(round(wastestreams[1,1],digits=1),"Mg/d")
-edgelabel_dict[1,3]=string(round(wastestreams[1,2],digits=1),"Mg/d")
-edgelabel_dict[1,4]=string(round(wastestreams[1,3],digits=1),"Mg/d")
-edgelabel_dict[5,2]=string(round(wastestreams[2,1],digits=1),"Mg/d")
-edgelabel_dict[5,3]=string(round(wastestreams[2,2],digits=1),"Mg/d")
-edgelabel_dict[5,4]=string(round(wastestreams[2,3],digits=1),"Mg/d")
-edgelabel_dict[3,2]=string(round(residualstreams[2,1],digits=1),"Mg/d")
-edgelabel_dict[4,2]=string(round(residualstreams[3,1],digits=1),"Mg/d")
+edgelabel_dict[1,2]=string(round(wastestreams[1,1],digits=0),"Mg/d")
+edgelabel_dict[1,3]=string(round(wastestreams[1,2],digits=0),"Mg/d")
+edgelabel_dict[1,4]=string(round(wastestreams[1,3],digits=0),"Mg/d")
+edgelabel_dict[5,2]=string(round(wastestreams[2,1],digits=0),"Mg/d")
+edgelabel_dict[5,3]=string(round(wastestreams[2,2],digits=0),"Mg/d")
+edgelabel_dict[5,4]=string(round(wastestreams[2,3],digits=0),"Mg/d")
+edgelabel_dict[3,2]=string(round(residualstreams[2,1],digits=0),"Mg/d")
+edgelabel_dict[4,2]=string(round(residualstreams[3,1],digits=0),"Mg/d")
 
-graphplot(A, names=names, x=xpos, y=ypos, fontsize = 6,markersize=2, markershapes=shapes, markercolor=:white,edgelabel = edgelabel_dict,self_edge_size=5,linealpha=0.5)
+graphplot(A, names=names, x=xpos, y=ypos, fontsize = 6,markersize=2, markershapes=shapes, 
+markercolor=:white,edgelabel = edgelabel_dict,self_edge_size=5,linealpha=0.5)
 ```
-The objective value is $33127. In this plan, the MRF is turned on, but the WTE is turned off. 
+The objective value is $$33127. Unlike the previous answer, the MRF is turned on, but the WTE is turned off. Now, City 1 sends all of its waste to recycling, while City 2 sends some of its waste to both the MRF and the landfill.   
 # References
+Core functions. (n.d.). Graphs.jl. Retrieved November 2, 2022, from https://juliagraphs.org/Graphs.jl/dev/core_functions/core/ 
+
+Examples. (n.d.). Julia Plots. Retrieved November 2, 2022, from https://docs.juliaplots.org/latest/GraphRecipes/examples/ 
+
+LaTeX/Mathematics. (2022, October 25). Wikibooks. Retrieved November 2, 2022 from https://en.wikibooks.org/wiki/LaTeX/Mathematics
+
+Srikrishnan, V. (2022, October 17). Mixed Integer Programming and Waste Management [Lecture notes]. Cornell University. https://viveks.me/environmental-systems-analysis/assets/lecture-notes/13-mixed-integer-programming/index.html#1
+
+
