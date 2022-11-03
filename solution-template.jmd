@@ -25,13 +25,13 @@ Pkg.instantiate()
 city1mass = 100 #(MG/d)
 city2mass = 170 # (MG/d)
 
-#the masses
 Massfracs = [.15; .40; .05;.03;.02;.05;.18;.04;.02;.02;.01;.03]
 CombFrac = [0.08;0.07;0.05;0.1;0.15;0.02;0.02;1;1;1;1;.7]
 MRFRecRate = [0;.55;.15;.1;0;.3;.4;.6;.75;.8;.5;0]
+NotRecRate = ones(12,1)-MRFRecRate
 OverallAshRate = sum(Massfracs.*CombFrac);
 OverallRecRate = sum(Massfracs.*MRFRecRate);
-AshRecycling = sum(Massfracs.*CombFrac.*MRFRecRate);
+AshRecycling = sum(Massfracs.*CombFrac.*NotRecRate);
 ```
 
 The overall percentage of waste that becomes combustion ash is `j round(OverallAshRate*100; digits=0)`%.
@@ -204,7 +204,7 @@ The objective value was $$28886. The MRF will not be used.
 
 The carbon tax does not impose any new constraints - rather, it merely changes the costs associated with transportation and tipping fees. 
 To modify the optimization program from Problem 1, these costs must be changed such that
-the tipping fee is $\$$75/Mg and $a_{i,j}=2$. 
+the tipping fee is $$75/Mg and $a_{i,j}=2$. 
 
 ## Problem 2.2
 
